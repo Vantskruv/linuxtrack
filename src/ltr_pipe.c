@@ -109,6 +109,7 @@ enum formats {
 	FORMAT_UINPUT_ABS   = 7, // uinput absolute position (like a joystick)
 #endif
 	FORMAT_IL2_6DOF     = 8, // For IL-2 Shturmovik v4.11+ (6DOF) with DeviceLink protocol
+	FORMAT_OPENTRACK	= 9, // For opentrack UDP over network
 };
 
 
@@ -161,7 +162,8 @@ enum option_codes {
 #endif
 	OPT_FORMAT_IL2_6DOF        = 0x11,
 #ifdef LINUX
-        OPT_UINPUT_ABS_RANGE       = 0x12
+    OPT_UINPUT_ABS_RANGE       = 0x12,
+	OPT_FORMAT_OPENTRACK       = 0x13,
 #endif
 };
 
@@ -283,12 +285,18 @@ static struct option Opts[] = {
 		0,
 		OPT_FORMAT_UINPUT_ABS
 	},
-        {
-                "uinput-abs-range",
-                required_argument,
-                0,
-                OPT_UINPUT_ABS_RANGE
-        },
+    {
+    	"uinput-abs-range",
+        required_argument,
+        0,
+        OPT_UINPUT_ABS_RANGE
+    },
+	{
+		"format-opentrack",
+		no_argument,
+		0,
+		OPT_FORMAT_OPENTRACK
+	},
 #endif
 	{ 0, 0, 0, 0 }
 };
@@ -343,6 +351,7 @@ static void help(void)
 "  --format-uinput-rel        uinput relative position (like a mouse)\n"
 "  --format-uinput-abs        uinput absolute position (like a joystick)\n"
 "  --uinput-abs-range=RANGE   specify precision of abs device (-RANGE to +RANGE)\n"
+"  --format-opentrack         Opentrack UDP over network compatible format\n"
 #endif
 "\n",
 
@@ -425,12 +434,15 @@ static void parse_opts(int argc, char **argv)
 		case OPT_FORMAT_UINPUT_REL:
 			Args.format = FORMAT_UINPUT_REL;
 			break;
-                case OPT_FORMAT_UINPUT_ABS:
-                        Args.format = FORMAT_UINPUT_ABS;
-                        break;
-                case OPT_UINPUT_ABS_RANGE:
-                        Args.range = atoi(optarg);
-                        break;
+        case OPT_FORMAT_UINPUT_ABS:
+        	Args.format = FORMAT_UINPUT_ABS;
+            break;
+        case OPT_UINPUT_ABS_RANGE:
+        	Args.range = atoi(optarg);
+            break;
+		case OPT_FORMAT_OPENTRACK:
+			Args.format = FORMAT_OPENTRACK;
+			break;
 #endif
 		case '?':
 			exit(EXIT_FAILURE);
@@ -1103,6 +1115,37 @@ static void write_data_uinput(const struct ltr_data *d)
 	ie.value = 0;
 	xwrite(&ie, sizeof(ie));
 }
+
+/**
+ * write_data_opentrack() - Write data in Opentrack format
+ * @d:                    Data to write.
+ **/
+static void write_data_opentrack(const struct ltr_data *d)
+{
+	const size_t bsz = 48;
+	double buf[6];
+	double tmp;
+
+	tmp = (double) d->x;
+	memcpy(&buf[0], &tmp, sizeof(double));
+	
+	tmp = (double) d->y;
+	memcpy(&buf[1], &tmp, sizeof(double));
+	
+	tmp = (double) d->z;
+	memcpy(&buf[2], &tmp, sizeof(double));
+	
+	tmp = (double) d->h;
+	memcpy(&buf[3], &tmp, sizeof(double));
+	
+	tmp = (double) d->p;
+	memcpy(&buf[4], &tmp, sizeof(double));
+	
+	tmp = (double) d->r;
+	memcpy(&buf[5], &tmp, sizeof(double));
+
+	xwrite(buf, bsz);
+}
 #endif /* LINUX */
 
 
@@ -1133,6 +1176,9 @@ static void write_data(const struct ltr_data *d)
 		break;
 
 #ifdef LINUX
+	case FORMAT_OPENTRACK:
+		write_data_opentrack(d);
+		break;
 	case FORMAT_UINPUT_REL:
 	case FORMAT_UINPUT_ABS:
 		write_data_uinput(d);
